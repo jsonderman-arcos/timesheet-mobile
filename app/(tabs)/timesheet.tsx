@@ -33,7 +33,7 @@ export default function TimesheetScreen() {
   const workOrders = getCurrentStormWorkOrders();
   const todaysEntries = timesheetEntries.filter(entry => 
     entry.date === selectedDate && 
-    entry.stormEventId === currentStorm?.id
+    (entry.stormEventId === currentStorm?.id || !entry.stormEventId)
   );
 
   const activeEntries = todaysEntries.filter(entry => !entry.clockOut);
@@ -68,12 +68,10 @@ export default function TimesheetScreen() {
 
     availableCrew.forEach(crewMember => {
       const newEntry: Omit<TimesheetEntry, 'id'> = {
-        stormEventId: currentStorm?.id || '',
-        crewMemberId: crewMember.id,
+        crew_member_id: crewMember.id,
         date: selectedDate,
-        clockIn: timeString,
+        clock_in: timeString,
         activity: 'working',
-        location: mockLocation,
         status: 'draft'
       };
       addTimesheetEntry(newEntry);
@@ -97,7 +95,7 @@ export default function TimesheetScreen() {
     // Clock out all active crew members
     activeEntries.forEach(entry => {
       updateTimesheetEntry(entry.id, { 
-        clockOut: timeString,
+        clock_out: timeString,
         status: 'submitted'
       });
     });
@@ -125,12 +123,10 @@ export default function TimesheetScreen() {
       } : undefined;
 
       const newEntry: Omit<TimesheetEntry, 'id'> = {
-        stormEventId: currentStorm?.id || '',
-        crewMemberId,
+        crew_member_id: crewMemberId,
         date: selectedDate,
-        clockIn: timeString,
+        clock_in: timeString,
         activity: 'working',
-        location: mockLocation,
         status: 'draft'
       };
 
@@ -160,7 +156,7 @@ export default function TimesheetScreen() {
     const timeString = now.toTimeString().slice(0, 5);
     
     updateTimesheetEntry(entryId, { 
-      clockOut: timeString,
+      clock_out: timeString,
       status: 'submitted'
     });
     
@@ -180,7 +176,7 @@ export default function TimesheetScreen() {
   };
 
   const getCrewActiveEntry = (crewId: string) => {
-    return activeEntries.find(entry => entry.crewMemberId === crewId);
+    return activeEntries.find(entry => entry.crew_member_id === crewId);
   };
 
   const handleEditEntry = (entry: TimesheetEntry) => {
@@ -194,10 +190,8 @@ export default function TimesheetScreen() {
   const getTotalHoursToday = () => {
     let totalMinutes = 0;
     completedEntries.forEach(entry => {
-      if (entry.clockOut) {
-        const start = new Date(`${entry.date} ${entry.clockIn}`);
-        const end = new Date(`${entry.date} ${entry.clockOut}`);
-        totalMinutes += (end.getTime() - start.getTime()) / (1000 * 60);
+      if (entry.hours_worked) {
+        totalMinutes += entry.hours_worked * 60;
       }
     });
     return (totalMinutes / 60).toFixed(1);
@@ -213,7 +207,7 @@ export default function TimesheetScreen() {
   };
 
   const availableCrew = crewMembers.filter(crewMember => 
-    !activeEntries.find(entry => entry.crewMemberId === crewMember.id)
+    !activeEntries.find(entry => entry.crew_member_id === crewMember.id)
   );
   if (!currentStorm) {
     return (
@@ -311,7 +305,7 @@ export default function TimesheetScreen() {
             </View>
             
             {activeEntries.map(entry => {
-              const crewMember = crewMembers.find(c => c.id === entry.crewMemberId);
+              const crewMember = crewMembers.find(c => c.id === entry.crew_member_id);
               const workOrder = workOrders.find(w => w.id === entry.workOrderId);
               
               if (!crewMember) return null;
@@ -368,7 +362,7 @@ export default function TimesheetScreen() {
             </View>
             
             {completedEntries.map(entry => {
-              const crewMember = crewMembers.find(c => c.id === entry.crewMemberId);
+              const crewMember = crewMembers.find(c => c.id === entry.crew_member_id);
               const workOrder = workOrders.find(w => w.id === entry.workOrderId);
               
               if (!crewMember) return null;

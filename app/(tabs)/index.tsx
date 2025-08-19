@@ -11,18 +11,16 @@ export default function DashboardScreen() {
   const workOrders = getCurrentStormWorkOrders();
   const todayEntries = timesheetEntries.filter(entry => 
     entry.date === new Date().toISOString().split('T')[0] && 
-    entry.stormEventId === currentStorm?.id
+    (entry.stormEventId === currentStorm?.id || !entry.stormEventId)
   );
-  const activeEntries = todayEntries.filter(entry => !entry.clockOut);
+  const activeEntries = todayEntries.filter(entry => !entry.clock_out);
 
   const getTotalHoursToday = () => {
-    let totalMinutes = 0;
-    todayEntries.filter(entry => entry.clockOut).forEach(entry => {
-      const start = new Date(`${entry.date} ${entry.clockIn}`);
-      const end = new Date(`${entry.date} ${entry.clockOut!}`);
-      totalMinutes += (end.getTime() - start.getTime()) / (1000 * 60);
+    let totalHours = 0;
+    todayEntries.filter(entry => entry.hours_worked).forEach(entry => {
+      totalHours += entry.hours_worked || 0;
     });
-    return (totalMinutes / 60).toFixed(1);
+    return totalHours.toFixed(1);
   };
 
   const handleCardPress = (route: string) => {
@@ -94,14 +92,14 @@ export default function DashboardScreen() {
           
           <View style={styles.activityList}>
             {activeEntries.slice(0, 5).map(entry => {
-              const crew = crewMembers.find(c => c.id === entry.crewMemberId);
+              const crew = crewMembers.find(c => c.id === entry.crew_member_id);
               if (!crew) return null;
               
               return (
                 <View key={entry.id} style={styles.activityItem}>
                   <MaterialIcons name="login" size={16} color="#10B981" />
                   <Text style={styles.activityText}>
-                    {crew.name} clocked in at {entry.clockIn}
+                    {crew.name} clocked in at {entry.clock_in}
                   </Text>
                   <Text style={styles.activityTime}>
                     {entry.activity}

@@ -17,6 +17,7 @@ export function TimesheetCard({ entry, crewMember, workOrder, onEdit, onDelete, 
   const [showDetails, setShowDetails] = useState(false);
 
   const isActive = !entry.clockOut;
+  const isActive = !entry.clock_out;
 
   const getActivityColor = (activity: string) => {
     switch (activity) {
@@ -39,11 +40,8 @@ export function TimesheetCard({ entry, crewMember, workOrder, onEdit, onDelete, 
   };
 
   const calculateHours = () => {
-    if (!entry.clockOut) return 'In Progress';
-    const start = new Date(`${entry.date} ${entry.clockIn}`);
-    const end = new Date(`${entry.date} ${entry.clockOut}`);
-    const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-    return `${hours.toFixed(1)}h`;
+    if (!entry.clock_out) return 'In Progress';
+    return entry.hours_worked ? `${entry.hours_worked.toFixed(1)}h` : '0.0h';
   };
 
   const formatTime = (time: string) => {
@@ -91,7 +89,7 @@ export function TimesheetCard({ entry, crewMember, workOrder, onEdit, onDelete, 
         <View style={styles.timeInfo}>
           <View style={styles.timeSlot}>
             <MaterialIcons name="login" size={16} color="#10B981" />
-            <Text style={styles.timeText}>{formatTime(entry.clockIn)}</Text>
+            <Text style={styles.timeText}>{formatTime(entry.clock_in)}</Text>
           </View>
           
           <View style={styles.timeDivider}>
@@ -102,8 +100,8 @@ export function TimesheetCard({ entry, crewMember, workOrder, onEdit, onDelete, 
           
           <View style={styles.timeSlot}>
             <MaterialIcons name="logout" size={16} color={entry.clockOut ? "#EF4444" : "#9CA3AF"} />
-            <Text style={[styles.timeText, !entry.clockOut && styles.pendingText]}>
-              {entry.clockOut ? formatTime(entry.clockOut) : 'Active'}
+            <Text style={[styles.timeText, !entry.clock_out && styles.pendingText]}>
+              {entry.clock_out ? formatTime(entry.clock_out) : 'Active'}
             </Text>
           </View>
         </View>
@@ -191,7 +189,7 @@ export function TimesheetCard({ entry, crewMember, workOrder, onEdit, onDelete, 
                 <Text style={styles.detailText}>{entry.exception.reason}</Text>
                 <Text style={styles.detailSubtext}>{entry.exception.description}</Text>
                 <Text style={[styles.detailSubtext, { color: getStatusColor(entry.exception.status) }]}>
-                  Status: {entry.exception.status}
+                  {formatTime(entry.clock_in)} - {entry.clock_out ? formatTime(entry.clock_out) : 'Active'}
                 </Text>
               </View>
             )}

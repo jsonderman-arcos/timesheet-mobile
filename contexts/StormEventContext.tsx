@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { db, CrewMember as DBCrewMember, TimesheetEntry as DBTimesheetEntry } from '@/lib/supabase';
 
 export interface StormEvent {
   id: string;
@@ -25,33 +25,21 @@ export interface WorkOrder {
   assignedCrew: string[];
 }
 
-export interface CrewMember {
-  id: string;
-  name: string;
-  role: string;
-  phone: string;
-  email: string;
+export interface CrewMember extends DBCrewMember {
   certifications: string[];
-  hourlyRate: number;
   currentStatus: 'clocked-in' | 'clocked-out' | 'on-break';
 }
 
-export interface TimesheetEntry {
-  id: string;
-  stormEventId: string;
-  crewMemberId: string;
-  date: string;
+export interface TimesheetEntry extends Omit<DBTimesheetEntry, 'clock_in' | 'clock_out'> {
+  stormEventId?: string;
   clockIn: string;
   clockOut?: string;
   workOrderId?: string;
-  activity: 'traveling' | 'working' | 'standby' | 'break';
   location?: {
     latitude: number;
     longitude: number;
     address: string;
   };
-  notes?: string;
-  status: 'draft' | 'submitted' | 'approved' | 'rejected';
   exception?: {
     reason: string;
     description: string;
@@ -66,11 +54,14 @@ interface StormEventContextType {
   crewMembers: CrewMember[];
   timesheetEntries: TimesheetEntry[];
   setCurrentStorm: (storm: StormEvent) => void;
+  loadCrewMembers: () => Promise<void>;
+  loadTimesheetEntries: (date?: string) => Promise<void>;
   addTimesheetEntry: (entry: Omit<TimesheetEntry, 'id'>) => void;
   updateTimesheetEntry: (id: string, updates: Partial<TimesheetEntry>) => void;
   deleteTimesheetEntry: (id: string) => void;
   getCrewTimesheetForDate: (crewId: string, date: string) => TimesheetEntry[];
   getCurrentStormWorkOrders: () => WorkOrder[];
+  getTotalHoursForDate: (date: string) => Promise<number>;
 }
 
 const StormEventContext = createContext<StormEventContextType | undefined>(undefined);
@@ -145,107 +136,31 @@ const mockWorkOrders: WorkOrder[] = [
   },
 ];
 
-const mockCrewMembers: CrewMember[] = [
-  {
-    id: 'crew-1',
-    name: 'John Martinez',
-    role: 'Crew Lead',
-    phone: '(555) 123-4567',
-    email: 'j.martinez@utility.com',
-    certifications: ['Electrical Safety', 'Crane Operation', 'First Aid'],
-    hourlyRate: 45,
-    currentStatus: 'clocked-in',
-  },
-  {
-    id: 'crew-2',
-    name: 'Sarah Johnson',
-    role: 'Line Technician',
-    phone: '(555) 234-5678',
-    email: 's.johnson@utility.com',
-    certifications: ['Line Work', 'High Voltage'],
-    hourlyRate: 38,
-    currentStatus: 'clocked-in',
-  },
-  {
-    id: 'crew-3',
-    name: 'Mike Davis',
-    role: 'Equipment Operator',
-    phone: '(555) 345-6789',
-    email: 'm.davis@utility.com',
-    certifications: ['Heavy Equipment', 'CDL Class A'],
-    hourlyRate: 35,
-    currentStatus: 'clocked-out',
-  },
-  {
-    id: 'crew-4',
-    name: 'Lisa Chen',
-    role: 'Safety Coordinator',
-    phone: '(555) 456-7890',
-    email: 'l.chen@utility.com',
-    certifications: ['Safety Management', 'OSHA 30'],
-    hourlyRate: 42,
-    currentStatus: 'clocked-in',
-  },
-  {
-    id: 'crew-5',
-    name: 'David Wilson',
-    role: 'Apprentice Lineman',
-    phone: '(555) 567-8901',
-    email: 'd.wilson@utility.com',
-    certifications: ['Basic Electrical', 'First Aid'],
-    hourlyRate: 28,
-    currentStatus: 'clocked-out',
-  },
-  {
-    id: 'crew-6',
-    name: 'Angela Rodriguez',
-    role: 'Field Engineer',
-    phone: '(555) 678-9012',
-    email: 'a.rodriguez@utility.com',
-    certifications: ['Engineering', 'Project Management'],
-    hourlyRate: 50,
-    currentStatus: 'on-break',
-  },
-];
-
 export function StormEventProvider({ children }: { children: ReactNode }) {
   const [currentStorm, setCurrentStorm] = useState<StormEvent | null>(null);
   const [stormEvents] = useState<StormEvent[]>(mockStormEvents);
   const [workOrders] = useState<WorkOrder[]>(mockWorkOrders);
-  const [crewMembers] = useState<CrewMember[]>(mockCrewMembers);
+  const [crewMembers, setCrewMembers] = useState<CrewMember[]>([]);
   const [timesheetEntries, setTimesheetEntries] = useState<TimesheetEntry[]>([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    loadStoredData();
+    initializeData();
   }, []);
 
-  useEffect(() => {
-    if (currentStorm) {
-      AsyncStorage.setItem('currentStorm', JSON.stringify(currentStorm));
-    }
-  }, [currentStorm]);
-
-  const loadStoredData = async () => {
+  const initializeData = async () => {
     try {
-      const storedStorm = await AsyncStorage.getItem('currentStorm');
-      const storedEntries = await AsyncStorage.getItem('timesheetEntries');
-      
-      if (storedStorm) {
-        setCurrentStorm(JSON.parse(storedStorm));
-      } else {
-        // Set first active storm as default
-        const activeStorm = stormEvents.find(s => s.status === 'active');
-        if (activeStorm) {
-          setCurrentStorm(activeStorm);
-        }
+      // Set default storm
+      const activeStorm = stormEvents.find(s => s.status === 'active');
+      if (activeStorm) {
+        setCurrentStorm(activeStorm);
       }
       
-      if (storedEntries) {
-        setTimesheetEntries(JSON.parse(storedEntries));
-      }
+      // Load data from database
+      await loadCrewMembers();
+      await loadTimesheetEntries();
     } catch (error) {
-      console.error('Error loading stored data:', error);
-      // Set default storm if loading fails
+      console.error('Error initializing data:', error);
       const activeStorm = stormEvents.find(s => s.status === 'active');
       if (activeStorm) {
         setCurrentStorm(activeStorm);
@@ -253,40 +168,124 @@ export function StormEventProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const loadCrewMembers = async () => {
+    try {
+      setLoading(true);
+      const dbCrewMembers = await db.getCrewMembers();
+      
+      // Transform database crew members to include additional fields
+      const transformedCrewMembers: CrewMember[] = dbCrewMembers.map(member => ({
+        ...member,
+        certifications: [], // Default empty array, could be expanded later
+        currentStatus: 'clocked-out' as const, // Default status
+      }));
+      
+      setCrewMembers(transformedCrewMembers);
+    } catch (error) {
+      console.error('Error loading crew members:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadTimesheetEntries = async (date?: string) => {
+    try {
+      setLoading(true);
+      const dbEntries = await db.getTimesheetEntries(date);
+      
+      // Transform database entries to match our interface
+      const transformedEntries: TimesheetEntry[] = dbEntries.map(entry => ({
+        ...entry,
+        clockIn: entry.clock_in,
+        clockOut: entry.clock_out || undefined,
+      }));
+      
+      setTimesheetEntries(transformedEntries);
+    } catch (error) {
+      console.error('Error loading timesheet entries:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const addTimesheetEntry = (entry: Omit<TimesheetEntry, 'id'>) => {
-    const newEntry: TimesheetEntry = {
-      ...entry,
-      id: `entry-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    const createEntry = async () => {
+      try {
+        const dbEntry = await db.createTimesheetEntry({
+          crew_member_id: entry.crewMemberId,
+          date: entry.date,
+          clock_in: entry.clockIn,
+          clock_out: entry.clockOut || null,
+          activity: entry.activity,
+          notes: entry.notes,
+          status: entry.status,
+        });
+        
+        const transformedEntry: TimesheetEntry = {
+          ...dbEntry,
+          crewMemberId: dbEntry.crew_member_id,
+          clockIn: dbEntry.clock_in,
+          clockOut: dbEntry.clock_out || undefined,
+          stormEventId: entry.stormEventId,
+          workOrderId: entry.workOrderId,
+          location: entry.location,
+          exception: entry.exception,
+        };
+        
+        setTimesheetEntries(prev => [...prev, transformedEntry]);
+      } catch (error) {
+        console.error('Error creating timesheet entry:', error);
+      }
     };
     
-    setTimesheetEntries(prev => {
-      const updated = [...prev, newEntry];
-      AsyncStorage.setItem('timesheetEntries', JSON.stringify(updated));
-      return updated;
-    });
+    createEntry();
   };
 
   const updateTimesheetEntry = (id: string, updates: Partial<TimesheetEntry>) => {
-    setTimesheetEntries(prev => {
-      const updated = prev.map(entry => 
-        entry.id === id ? { ...entry, ...updates } : entry
-      );
-      AsyncStorage.setItem('timesheetEntries', JSON.stringify(updated));
-      return updated;
-    });
+    const updateEntry = async () => {
+      try {
+        const dbUpdates: any = {};
+        if (updates.clockOut !== undefined) dbUpdates.clock_out = updates.clockOut;
+        if (updates.activity !== undefined) dbUpdates.activity = updates.activity;
+        if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
+        if (updates.status !== undefined) dbUpdates.status = updates.status;
+        
+        const updatedEntry = await db.updateTimesheetEntry(id, dbUpdates);
+        
+        setTimesheetEntries(prev => 
+          prev.map(entry => 
+            entry.id === id ? {
+              ...entry,
+              ...updates,
+              clockIn: updatedEntry.clock_in,
+              clockOut: updatedEntry.clock_out || undefined,
+            } : entry
+          )
+        );
+      } catch (error) {
+        console.error('Error updating timesheet entry:', error);
+      }
+    };
+    
+    updateEntry();
   };
 
   const deleteTimesheetEntry = (id: string) => {
-    setTimesheetEntries(prev => {
-      const updated = prev.filter(entry => entry.id !== id);
-      AsyncStorage.setItem('timesheetEntries', JSON.stringify(updated));
-      return updated;
-    });
+    const deleteEntry = async () => {
+      try {
+        await db.deleteTimesheetEntry(id);
+        setTimesheetEntries(prev => prev.filter(entry => entry.id !== id));
+      } catch (error) {
+        console.error('Error deleting timesheet entry:', error);
+      }
+    };
+    
+    deleteEntry();
   };
 
   const getCrewTimesheetForDate = (crewId: string, date: string): TimesheetEntry[] => {
     return timesheetEntries.filter(entry => 
-      entry.crewMemberId === crewId && 
+      entry.crew_member_id === crewId && 
       entry.date === date &&
       entry.stormEventId === currentStorm?.id
     );
@@ -294,6 +293,15 @@ export function StormEventProvider({ children }: { children: ReactNode }) {
 
   const getCurrentStormWorkOrders = (): WorkOrder[] => {
     return workOrders.filter(wo => wo.stormEventId === currentStorm?.id);
+  };
+
+  const getTotalHoursForDate = async (date: string): Promise<number> => {
+    try {
+      return await db.getTotalHoursForDate(date);
+    } catch (error) {
+      console.error('Error getting total hours:', error);
+      return 0;
+    }
   };
 
   return (
@@ -304,11 +312,14 @@ export function StormEventProvider({ children }: { children: ReactNode }) {
       crewMembers,
       timesheetEntries,
       setCurrentStorm,
+      loadCrewMembers,
+      loadTimesheetEntries,
       addTimesheetEntry,
       updateTimesheetEntry,
       deleteTimesheetEntry,
       getCrewTimesheetForDate,
       getCurrentStormWorkOrders,
+      getTotalHoursForDate,
     }}>
       {children}
     </StormEventContext.Provider>
