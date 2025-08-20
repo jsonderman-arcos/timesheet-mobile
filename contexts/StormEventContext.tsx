@@ -146,30 +146,20 @@ export function StormEventProvider({ children }: { children: ReactNode }) {
   const isMountedRef = useRef(true);
 
   useEffect(() => {
-    initializeData();
+    loadDynamicData();
     
     return () => {
       isMountedRef.current = false;
     };
   }, []);
 
-  const initializeData = async () => {
+  const loadDynamicData = async () => {
     try {
-      // Set default storm
-      const activeStorm = stormEvents.find(s => s.status === 'active');
-      if (activeStorm && isMountedRef.current) {
-        setCurrentStorm(activeStorm);
-      }
-      
       // Load data from database
       await loadCrewMembers();
       await loadTimesheetEntries();
     } catch (error) {
-      console.error('Error initializing data:', error);
-      const activeStorm = stormEvents.find(s => s.status === 'active');
-      if (activeStorm && isMountedRef.current) {
-        setCurrentStorm(activeStorm);
-      }
+      console.error('Error loading dynamic data:', error);
     }
   };
 
