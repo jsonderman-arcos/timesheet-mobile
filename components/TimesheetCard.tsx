@@ -17,7 +17,6 @@ export function TimesheetCard({ entry, crewMember, workOrder, onEdit, onDelete, 
   const [showDetails, setShowDetails] = useState(false);
 
   const isActive = !entry.clockOut;
-  const isActive = !entry.clock_out;
 
   const getActivityColor = (activity: string) => {
     switch (activity) {
