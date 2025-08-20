@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
-import { db, CrewMember as DBCrewMember, TimesheetEntry as DBTimesheetEntry } from '@/lib/supabase';
+import { db, CrewMember as DBCrewMember, TimesheetEntry as DBTimesheetEntry, isSupabaseConfigured } from '@/lib/supabase';
 
 export interface StormEvent {
   id: string;
@@ -154,6 +154,12 @@ export function StormEventProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadDynamicData = async () => {
+    // Skip database operations if Supabase is not configured
+    if (!isSupabaseConfigured()) {
+      console.warn('Supabase not configured. Using mock data.');
+      return;
+    }
+
     try {
       // Load data from database
       await loadCrewMembers();
@@ -164,6 +170,8 @@ export function StormEventProvider({ children }: { children: ReactNode }) {
   };
 
   const loadCrewMembers = async () => {
+    if (!isSupabaseConfigured()) return;
+    
     try {
       if (isMountedRef.current) {
         setLoading(true);
@@ -190,6 +198,8 @@ export function StormEventProvider({ children }: { children: ReactNode }) {
   };
 
   const loadTimesheetEntries = async (date?: string) => {
+    if (!isSupabaseConfigured()) return;
+    
     try {
       if (isMountedRef.current) {
         setLoading(true);
@@ -217,6 +227,11 @@ export function StormEventProvider({ children }: { children: ReactNode }) {
 
   const addTimesheetEntry = (entry: Omit<TimesheetEntry, 'id'>) => {
     const createEntry = async () => {
+      if (!isSupabaseConfigured()) {
+        console.warn('Supabase not configured. Cannot add timesheet entry.');
+        return;
+      }
+      
       try {
         const dbEntry = await db.createTimesheetEntry({
           crew_member_id: entry.crewMemberId,
@@ -252,6 +267,11 @@ export function StormEventProvider({ children }: { children: ReactNode }) {
 
   const updateTimesheetEntry = (id: string, updates: Partial<TimesheetEntry>) => {
     const updateEntry = async () => {
+      if (!isSupabaseConfigured()) {
+        console.warn('Supabase not configured. Cannot update timesheet entry.');
+        return;
+      }
+      
       try {
         const dbUpdates: any = {};
         if (updates.clockOut !== undefined) dbUpdates.clock_out = updates.clockOut;
@@ -283,6 +303,11 @@ export function StormEventProvider({ children }: { children: ReactNode }) {
 
   const deleteTimesheetEntry = (id: string) => {
     const deleteEntry = async () => {
+      if (!isSupabaseConfigured()) {
+        console.warn('Supabase not configured. Cannot delete timesheet entry.');
+        return;
+      }
+      
       try {
         await db.deleteTimesheetEntry(id);
         if (isMountedRef.current) {
