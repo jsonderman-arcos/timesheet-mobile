@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
 import { db, CrewMember as DBCrewMember, TimesheetEntry as DBTimesheetEntry } from '@/lib/supabase';
 
 export interface StormEvent {
@@ -143,16 +143,21 @@ export function StormEventProvider({ children }: { children: ReactNode }) {
   const [crewMembers, setCrewMembers] = useState<CrewMember[]>([]);
   const [timesheetEntries, setTimesheetEntries] = useState<TimesheetEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
     initializeData();
+    
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
   const initializeData = async () => {
     try {
       // Set default storm
       const activeStorm = stormEvents.find(s => s.status === 'active');
-      if (activeStorm) {
+      if (activeStorm && isMountedRef.current) {
         setCurrentStorm(activeStorm);
       }
       
@@ -162,7 +167,7 @@ export function StormEventProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Error initializing data:', error);
       const activeStorm = stormEvents.find(s => s.status === 'active');
-      if (activeStorm) {
+      if (activeStorm && isMountedRef.current) {
         setCurrentStorm(activeStorm);
       }
     }
@@ -170,7 +175,9 @@ export function StormEventProvider({ children }: { children: ReactNode }) {
 
   const loadCrewMembers = async () => {
     try {
-      setLoading(true);
+      if (isMountedRef.current) {
+        setLoading(true);
+      }
       const dbCrewMembers = await db.getCrewMembers();
       
       // Transform database crew members to include additional fields
@@ -180,17 +187,23 @@ export function StormEventProvider({ children }: { children: ReactNode }) {
         currentStatus: 'clocked-out' as const, // Default status
       }));
       
-      setCrewMembers(transformedCrewMembers);
+      if (isMountedRef.current) {
+        setCrewMembers(transformedCrewMembers);
+      }
     } catch (error) {
       console.error('Error loading crew members:', error);
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 
   const loadTimesheetEntries = async (date?: string) => {
     try {
-      setLoading(true);
+      if (isMountedRef.current) {
+        setLoading(true);
+      }
       const dbEntries = await db.getTimesheetEntries(date);
       
       // Transform database entries to match our interface
@@ -200,11 +213,15 @@ export function StormEventProvider({ children }: { children: ReactNode }) {
         clockOut: entry.clock_out || undefined,
       }));
       
-      setTimesheetEntries(transformedEntries);
+      if (isMountedRef.current) {
+        setTimesheetEntries(transformedEntries);
+      }
     } catch (error) {
       console.error('Error loading timesheet entries:', error);
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -232,7 +249,9 @@ export function StormEventProvider({ children }: { children: ReactNode }) {
           exception: entry.exception,
         };
         
-        setTimesheetEntries(prev => [...prev, transformedEntry]);
+        if (isMountedRef.current) {
+          setTimesheetEntries(prev => [...prev, transformedEntry]);
+        }
       } catch (error) {
         console.error('Error creating timesheet entry:', error);
       }
@@ -252,16 +271,18 @@ export function StormEventProvider({ children }: { children: ReactNode }) {
         
         const updatedEntry = await db.updateTimesheetEntry(id, dbUpdates);
         
-        setTimesheetEntries(prev => 
-          prev.map(entry => 
-            entry.id === id ? {
-              ...entry,
-              ...updates,
-              clockIn: updatedEntry.clock_in,
-              clockOut: updatedEntry.clock_out || undefined,
-            } : entry
-          )
-        );
+        if (isMountedRef.current) {
+          setTimesheetEntries(prev => 
+            prev.map(entry => 
+              entry.id === id ? {
+                ...entry,
+                ...updates,
+                clockIn: updatedEntry.clock_in,
+                clockOut: updatedEntry.clock_out || undefined,
+              } : entry
+            )
+          );
+        }
       } catch (error) {
         console.error('Error updating timesheet entry:', error);
       }
@@ -274,7 +295,9 @@ export function StormEventProvider({ children }: { children: ReactNode }) {
     const deleteEntry = async () => {
       try {
         await db.deleteTimesheetEntry(id);
-        setTimesheetEntries(prev => prev.filter(entry => entry.id !== id));
+        if (isMountedRef.current) {
+          setTimesheetEntries(prev => prev.filter(entry => entry.id !== id));
+        }
       } catch (error) {
         console.error('Error deleting timesheet entry:', error);
       }
